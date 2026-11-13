@@ -316,13 +316,17 @@ resize();
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const W_SLOW = 0.35, W_FAST = reduceMotion ? 1.1 : 7.5;
+// While the spin winds down the solid breathes in quick pulses. The last two
+// pulses grow, and the last one collapses into a half-size sphere.
+const SHAKES = Array.from({ length: 7 }, (_, i) => ({ dur: 0.3, amp: 0.02 + 0.03 * i / 6 }))
+  .concat({ dur: 0.36, amp: 0.11 }, { dur: 0.9, amp: 0.2, last: true });
+const SHAKE_GAIN = reduceMotion ? 0.25 : 1;
 const PHASES = [
   { id: 'cruise', dur: 0.8 },
   { id: 'accelerate', dur: 2.6 },
-  { id: 'decelerate', dur: 3.0 },
-  { id: 'morph', dur: 2.4 },
+  { id: 'decelerate', dur: SHAKES.reduce((a, c) => a + c.dur, 0) },
+  { id: 'emerge', dur: 1.3 },
 ];
-const SHAKE_AMP = reduceMotion ? 0 : 0.045, SHAKE_HZ = 3.4;
 const easeInOut = u => u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
 const easeSine = u => 0.5 - 0.5 * Math.cos(Math.PI * u);
 const easeOutCubic = u => 1 - Math.pow(1 - u, 3);
@@ -357,7 +361,7 @@ show(current);
 setMorph(0);
 material.color.copy(current.color);
 
-let phase = 0, phaseT = 0, omega = W_SLOW, paused = false, swapped = false;
+let phase = 0, phaseT = 0, omega = W_SLOW, decelFrom = W_FAST, prevW = current.w, paused = false;
 const axis = new THREE.Vector3(), dq = new THREE.Quaternion();
 let clockT = 0;
 const fromColor = new THREE.Color(), hud = {
@@ -366,14 +370,42 @@ const fromColor = new THREE.Color(), hud = {
 
 function updateHud() {
   const P = PHASES[phase];
-  hud.code.textContent = P.id === 'morph' ? `W${current.w} → W${nextW}` : `W${current.w}`;
+  hud.code.textContent = P.id === 'decelerate' ? `W${current.w} → W${nextW}`
+    : P.id === 'emerge' ? `W${prevW} → W${current.w}` : `W${current.w}`;
   hud.name.textContent = current.m.name;
   hud.phase.textContent = `${paused ? 'paused' : P.id} · ω ${omega.toFixed(2)}`;
 }
 
 function enterPhase(i) {
-  phase = i % PHASES.length; phaseT = 0; swapped = false;
-  if (PHASES[phase].id === 'morph') { shapeFor(nextW); fromColor.copy(current.color); }
+  phase = i % PHASES.length; phaseT = 0;
+  const id = PHASES[phase].id;
+  if (id === 'decelerate') { shapeFor(nextW); fromColor.copy(current.color); decelFrom = Math.max(omega, W_SLOW); }
+  if (id === 'emerge') {
+    // the old solid is a sphere now; swap in the next one, also a sphere at this point
+    // (only the current and next solids stay in memory; the dense meshes are large)
+    prevW = current.w;
+    cache.delete(current.w); current.geo.dispose(); current.lgeo.dispose();
+    current = shapeFor(nextW);
+    show(current);
+    setMorph(1);
+    history.replaceState(null, '', `#w${current.w}`);
+  }
+}
+
+// size and sphere amount over the shaking wind-down
+function shakeAt(t) {
+  let t0 = 0;
+  for (const c of SHAKES) {
+    if (t < t0 + c.dur || c.last) {
+      const x = Math.min(1, (t - t0) / c.dur);
+      if (!c.last) return { size: 1 + SHAKE_GAIN * c.amp * Math.sin(2 * Math.PI * x), s: 0 };
+      // last pulse: one big swell, then collapse into the sphere
+      if (x < 1 / 3) return { size: 1 + SHAKE_GAIN * c.amp * Math.sin(3 * Math.PI * x), s: 0 };
+      const v = easeInOut((x - 1 / 3) * 1.5);
+      return { size: 1 - (1 - MORPH_SHRINK) * v, s: v };
+    }
+    t0 += c.dur;
+  }
 }
 
 function step(dt) {
@@ -382,34 +414,24 @@ function step(dt) {
   let size = 1;
   if (P.id === 'cruise') omega = W_SLOW;
   else if (P.id === 'accelerate') omega = W_SLOW + (W_FAST - W_SLOW) * easeSine(u);
-  else if (P.id === 'decelerate') omega = W_FAST - (W_FAST - W_SLOW) * easeSine(u);
-  else {
+  else if (P.id === 'decelerate') {
+    omega = decelFrom - (decelFrom - W_SLOW) * easeSine(u);
+    const k = shakeAt(phaseT);
+    size = k.size;
+    setMorph(k.s);
+    material.color.copy(fromColor).lerp(shapeFor(nextW).color, 0.5 * k.s);
+  } else {
     omega = W_SLOW;
-    // shrink while inflating to the sphere, rest there, swap,
-    // then jump out to full size as the next solid snaps into shape
-    const target = shapeFor(nextW);
-    let s;
-    if (u < 0.46) { s = easeInOut(u / 0.46); size = 1 - (1 - MORPH_SHRINK) * s; }
-    else if (u < 0.54) { s = 1; size = MORPH_SHRINK; }
-    else {
-      const v = (u - 0.54) / 0.46;
-      s = 1 - easeOutCubic(v);
-      size = MORPH_SHRINK + (1 - MORPH_SHRINK) * easeOutBack(Math.min(1, v / 0.75));
-    }
-    if (!swapped && u >= 0.5) { show(target); swapped = true; }
-    setMorph(s);
-    material.color.copy(fromColor).lerp(target.color, easeSine(u));
+    // jump out to full size (with overshoot) as the next solid snaps into shape
+    const v = Math.max(0, (u - 0.06) / 0.94);
+    setMorph(1 - easeOutCubic(v));
+    size = MORPH_SHRINK + (1 - MORPH_SHRINK) * easeOutBack(Math.min(1, v / 0.75));
+    material.color.copy(fromColor).lerp(current.color, 0.5 + 0.5 * easeOutCubic(v));
   }
-  // quick breathing shake while the spin winds down, swelling in and out of the phase
-  const shake = P.id === 'decelerate' ? SHAKE_AMP * Math.sin(Math.PI * u) * Math.sin(2 * Math.PI * SHAKE_HZ * phaseT) : 0;
-  pivot.scale.setScalar(size + shake);
+  pivot.scale.setScalar(size);
   if (u >= 1) {
-    if (P.id === 'morph') {
-      // only the current and next solids stay in memory; the dense meshes are large
-      cache.delete(current.w); current.geo.dispose(); current.lgeo.dispose();
-      current = shapeFor(nextW);
+    if (P.id === 'emerge') {
       setMorph(0);
-      history.replaceState(null, '', `#w${current.w}`);
       nextW = pickNext(current.w);
       idle(() => shapeFor(nextW));
     }
@@ -425,7 +447,7 @@ function step(dt) {
 addEventListener('keydown', e => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.code === 'Space') { e.preventDefault(); paused = !paused; updateHud(); }
-  else if (e.key === 'ArrowRight' && PHASES[phase].id !== 'morph') enterPhase(PHASES.findIndex(p => p.id === 'morph'));
+  else if (e.key === 'ArrowRight' && ['cruise', 'accelerate'].includes(PHASES[phase].id)) enterPhase(PHASES.findIndex(p => p.id === 'decelerate'));
 });
 
 let last = performance.now();
