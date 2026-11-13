@@ -44,6 +44,48 @@
   #code { font-size: 20px; letter-spacing: -0.01em; color: var(--ink); }
   #name { color: var(--ink-dim); font-family: Inter, system-ui, sans-serif; font-weight: 400; }
   #phase { color: var(--ink-faint); }
+  #keep {
+    pointer-events: auto; display: flex; align-items: center; gap: 7px; margin-top: 3px; width: max-content;
+    font: 400 12px/1.3 Inter, system-ui, sans-serif; color: var(--ink-dim); cursor: pointer;
+  }
+  #keep:hover { color: var(--ink); }
+
+  /* square checkbox: hollow when off, a filled inner square when on */
+  input[type=checkbox] {
+    -webkit-appearance: none; appearance: none; flex: none; width: 12px; height: 12px; margin: 0;
+    border: 1px solid #5a6070; border-radius: 2px; background: transparent; cursor: pointer;
+  }
+  input[type=checkbox]:checked { border-color: var(--ink-dim); background: var(--ink); box-shadow: inset 0 0 0 2px var(--bg); }
+  input[type=checkbox]:indeterminate { border-color: var(--ink-dim); background: linear-gradient(var(--ink-dim), var(--ink-dim)) center / 6px 2px no-repeat; }
+  input[type=checkbox]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+  /* solids dropdown */
+  .pick {
+    all: unset; box-sizing: border-box; width: 100%; display: flex; justify-content: space-between; align-items: center;
+    padding: 5px 8px; border: 1px solid var(--line); border-radius: 5px; color: var(--ink); cursor: pointer;
+  }
+  .pick:hover { border-color: #353a48; }
+  .pick:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .pick svg { color: var(--ink-faint); transition: transform .2s cubic-bezier(.2, .8, .2, 1); }
+  .pick[aria-expanded=true] svg { transform: rotate(180deg); }
+  .solids { display: none; max-height: 280px; overflow-y: auto; overflow-x: hidden; margin-top: 4px; padding: 2px 0; border-bottom: 1px solid var(--line); scrollbar-width: thin; scrollbar-color: #343947 transparent; }
+  .solids.open { display: block; }
+  .solids label { display: flex; align-items: center; gap: 8px; padding: 2px 0; color: var(--ink-dim); cursor: pointer; }
+  .solids label:hover { color: var(--ink); }
+  .solids .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .solids .fam { margin-top: 8px; color: var(--ink); font-weight: 500; }
+  .solids .fam:first-child { margin-top: 2px; }
+  .solids .w { font: 500 11px "JetBrains Mono", ui-monospace, monospace; color: var(--ink-faint); min-width: 2.6em; }
+  .solids .now { color: var(--ink); }
+  .solids .now .w { color: var(--ink); }
+  .solids .now::after { content: "now"; margin-left: auto; padding-right: 4px; font-size: 11px; color: var(--ink-faint); }
+  .solids-actions { display: flex; gap: 12px; margin: 6px 0 2px; }
+  .solids-actions button {
+    all: unset; font-size: 12px; color: var(--ink-faint); cursor: pointer;
+    text-decoration: underline; text-underline-offset: 3px; text-decoration-color: #3a3f4c;
+  }
+  .solids-actions button:hover { color: var(--ink); }
+  .solids-actions button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
   .foot {
     position: fixed; right: 16px; bottom: 14px; z-index: 2;
     display: flex; gap: 14px; align-items: center; color: var(--ink-faint); font-size: 12px;
@@ -60,8 +102,8 @@
 
   /* tuning panel */
   #tune {
-    position: fixed; left: 16px; top: 96px; z-index: 3; width: min(240px, calc(100vw - 32px));
-    max-height: calc(100dvh - 150px); display: flex; flex-direction: column;
+    position: fixed; left: 16px; top: 118px; z-index: 3; width: min(260px, calc(100vw - 32px));
+    max-height: calc(100dvh - 172px); display: flex; flex-direction: column;
     background: rgb(13 15 21 / .82); border: 1px solid var(--line); border-radius: 8px;
   }
   #tune > button {
@@ -129,7 +171,9 @@
 </head>
 <body>
 <div class="floor" aria-hidden="true"></div>
-<div id="hud"><span id="code">W–</span><span id="name"></span><span id="phase"></span></div>
+<div id="hud"><span id="code">W–</span><span id="name"></span><span id="phase"></span>
+  <label id="keep"><input type="checkbox" checked> In rotation</label>
+</div>
 <section id="tune" aria-label="Timing and size">
   <button type="button" aria-expanded="false" aria-controls="tuneBody">Tuning
     <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -434,11 +478,37 @@ const easeSine = u => 0.5 - 0.5 * Math.cos(Math.PI * u);
 const easeOutCubic = u => 1 - Math.pow(1 - u, 3);
 const easeOutBack = u => 1 + (cfg.bounce + 1) * Math.pow(u - 1, 3) + cfg.bounce * Math.pow(u - 1, 2);
 
-const pool = MODELS.map(m => m.w);
+const ALL_W = MODELS.map(m => m.w);
+
+// Solids in rotation, as "1-5,7,20-22" in the URL and the copied link.
+function encodeSet(set) {
+  const ws = ALL_W.filter(w => set.has(w)), parts = [];
+  for (let i = 0; i < ws.length; i++) {
+    let j = i;
+    while (j + 1 < ws.length && ws[j + 1] === ws[j] + 1) j++;
+    parts.push(i === j ? `${ws[i]}` : `${ws[i]}-${ws[j]}`);
+    i = j;
+  }
+  return parts.join(',');
+}
+function decodeSet(str) {
+  const set = new Set();
+  for (const part of str.split(',')) {
+    const [a, b = a] = part.split('-').map(Number);
+    for (let w = a; w <= b && w - a < 200; w++) if (byW.has(w)) set.add(w);
+  }
+  return set;
+}
+const enabled = query.has('solids') ? decodeSet(query.get('solids')) : new Set(ALL_W);
+
 const recent = [];
 function pickNext(from) {
   const sym = byW.get(from).sym;
-  const fresh = pool.filter(w => w !== from && !recent.includes(w));
+  // removed solids never come back; with nothing else left, morph into itself
+  let pool = ALL_W.filter(w => enabled.has(w) && w !== from);
+  if (!pool.length) pool = [from];
+  let fresh = pool.filter(w => !recent.includes(w));
+  if (!fresh.length) fresh = pool;
   // mostly stay within the same symmetry so the morph keeps its axes
   const same = fresh.filter(w => byW.get(w).sym === sym);
   const list = same.length && Math.random() < 0.7 ? same : fresh;
@@ -455,7 +525,8 @@ function shapeFor(w) {
 const idle = window.requestIdleCallback || (cb => setTimeout(cb, 1));
 
 const hashW = Number((location.hash.match(/^#w(\d+)$/i) || [])[1]);
-let current = shapeFor(byW.has(hashW) ? hashW : pool[Math.floor(Math.random() * pool.length)]);
+const startPool = enabled.size ? [...enabled] : ALL_W;
+let current = shapeFor(byW.has(hashW) ? hashW : startPool[Math.floor(Math.random() * startPool.length)]);
 let nextW = pickNext(current.w);
 idle(() => shapeFor(nextW));
 show(current);
@@ -475,7 +546,9 @@ function updateHud() {
     : P.id === 'emerge' ? `W${prevW} → W${current.w}` : `W${current.w}`;
   hud.name.textContent = current.m.name;
   hud.phase.textContent = `${paused ? 'paused' : P.id} · ω ${omega.toFixed(2)}`;
+  if (hudFor !== current.w) { hudFor = current.w; syncSolids(); }
 }
+let hudFor = null;
 
 function enterPhase(i) {
   phase = i % PHASES.length; phaseT = 0;
@@ -564,6 +637,88 @@ function paintSlider(p) {
   out.value = fmt(p, cfg[p.k]);
 }
 
+// Solids dropdown: grouped checkboxes, plus the HUD's "In rotation" box for the current one.
+const solidsHead = document.createElement('h3');
+solidsHead.textContent = 'Solids';
+const pickBtn = document.createElement('button');
+pickBtn.type = 'button'; pickBtn.className = 'pick';
+pickBtn.setAttribute('aria-expanded', 'false');
+pickBtn.setAttribute('aria-controls', 'solidsList');
+pickBtn.innerHTML = '<span></span><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const solidsBox = document.createElement('div');
+solidsBox.className = 'solids'; solidsBox.id = 'solidsList';
+const solidsActions = document.createElement('div');
+solidsActions.className = 'solids-actions';
+const allBtn = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Select all' });
+const noneBtn = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Clear' });
+solidsActions.append(allBtn, noneBtn);
+solidsBox.append(solidsActions);
+
+const solidBoxes = new Map(), famBoxes = [];
+const families = [...new Set(MODELS.map(m => m.group))];
+for (const fam of families) {
+  const ws = MODELS.filter(m => m.group === fam).map(m => m.w);
+  const famLabel = document.createElement('label');
+  famLabel.className = 'fam';
+  const famBox = Object.assign(document.createElement('input'), { type: 'checkbox' });
+  famLabel.append(famBox, fam);
+  solidsBox.append(famLabel);
+  famBoxes.push({ box: famBox, ws });
+  famBox.addEventListener('change', () => setEnabled(ws, famBox.checked));
+  for (const w of ws) {
+    const row = document.createElement('label');
+    const box = Object.assign(document.createElement('input'), { type: 'checkbox' });
+    const code = document.createElement('span');
+    code.className = 'w'; code.textContent = `W${w}`;
+    const name = Object.assign(document.createElement('span'), { className: 'name', textContent: byW.get(w).name });
+    row.title = byW.get(w).name;
+    row.append(box, code, name);
+    solidsBox.append(row);
+    solidBoxes.set(w, { box, row });
+    box.addEventListener('change', () => setEnabled([w], box.checked));
+  }
+}
+tuneBody.append(solidsHead, pickBtn, solidsBox);
+pickBtn.addEventListener('click', () => {
+  const open = !solidsBox.classList.contains('open');
+  solidsBox.classList.toggle('open', open);
+  pickBtn.setAttribute('aria-expanded', open);
+  if (open) solidBoxes.get(current.w).row.scrollIntoView({ block: 'nearest' });
+});
+allBtn.addEventListener('click', () => setEnabled(ALL_W, true));
+noneBtn.addEventListener('click', () => setEnabled(ALL_W, false));
+
+const keepBox = document.querySelector('#keep input');
+keepBox.addEventListener('change', () => setEnabled([current.w], keepBox.checked));
+
+function setEnabled(ws, on) {
+  for (const w of ws) on ? enabled.add(w) : enabled.delete(w);
+  // the planned next solid was just removed: choose again, unless the morph toward it has begun
+  if (!enabled.has(nextW) && nextW !== current.w && ['cruise', 'accelerate'].includes(PHASES[phase].id)) {
+    const dropped = cache.get(nextW);
+    if (dropped) { cache.delete(nextW); dropped.geo.dispose(); dropped.lgeo.dispose(); }
+    nextW = pickNext(current.w);
+    idle(() => shapeFor(nextW));
+  }
+  syncSolids();
+}
+
+function syncSolids() {
+  for (const [w, { box, row }] of solidBoxes) {
+    box.checked = enabled.has(w);
+    row.classList.toggle('now', w === current.w);
+  }
+  for (const { box, ws } of famBoxes) {
+    const n = ws.filter(w => enabled.has(w)).length;
+    box.checked = n === ws.length;
+    box.indeterminate = n > 0 && n < ws.length;
+  }
+  keepBox.checked = enabled.has(current.w);
+  pickBtn.firstChild.textContent = enabled.size === ALL_W.length ? `All ${ALL_W.length} solids`
+    : enabled.size ? `${enabled.size} of ${ALL_W.length} solids` : 'None selected';
+}
+syncSolids();
+
 for (const p of PARAMS) {
   if (p.group) {
     const h = document.createElement('h3');
@@ -603,6 +758,7 @@ const copyState = document.getElementById('copyState');
 let copyTimer;
 document.getElementById('copyLink').addEventListener('click', async () => {
   const q = new URLSearchParams(SLIDERS.map(p => [p.k, String(cfg[p.k])]));
+  q.set('solids', encodeSet(enabled));
   const url = `${location.href.split(/[?#]/)[0]}?${q}#w${current.w}`;
   let ok = false;
   try { await navigator.clipboard.writeText(url); ok = true; } catch {
