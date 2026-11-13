@@ -317,11 +317,12 @@ resize();
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const W_SLOW = 0.35, W_FAST = reduceMotion ? 1.1 : 7.5;
 const PHASES = [
-  { id: 'cruise', dur: 3.2 },
-  { id: 'accelerate', dur: 3.0 },
-  { id: 'decelerate', dur: 3.4 },
-  { id: 'morph', dur: 4.2 },
+  { id: 'cruise', dur: 0.8 },
+  { id: 'accelerate', dur: 2.6 },
+  { id: 'decelerate', dur: 3.0 },
+  { id: 'morph', dur: 2.4 },
 ];
+const SHAKE_AMP = reduceMotion ? 0 : 0.045, SHAKE_HZ = 3.4;
 const easeInOut = u => u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
 const easeSine = u => 0.5 - 0.5 * Math.cos(Math.PI * u);
 
@@ -383,13 +384,16 @@ function step(dt) {
     // inflate to the sphere, rest there briefly, swap, settle into the next solid
     const target = shapeFor(nextW);
     let s;
-    if (u < 0.44) s = easeInOut(u / 0.44);
-    else if (u < 0.56) s = 1;
-    else s = easeInOut((1 - u) / 0.44);
+    if (u < 0.46) s = easeInOut(u / 0.46);
+    else if (u < 0.54) s = 1;
+    else s = easeInOut((1 - u) / 0.46);
     if (!swapped && u >= 0.5) { show(target); swapped = true; }
     setMorph(s);
     material.color.copy(fromColor).lerp(target.color, easeSine(u));
   }
+  // quick breathing shake while the spin winds down, swelling in and out of the phase
+  const shake = P.id === 'decelerate' ? SHAKE_AMP * Math.sin(Math.PI * u) * Math.sin(2 * Math.PI * SHAKE_HZ * phaseT) : 0;
+  pivot.scale.setScalar(1 + shake);
   if (u >= 1) {
     if (P.id === 'morph') {
       // only the current and next solids stay in memory; the dense meshes are large
