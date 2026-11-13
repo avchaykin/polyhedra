@@ -316,15 +316,21 @@ resize();
 
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const W_SLOW = 0.35, W_FAST = reduceMotion ? 1.1 : 7.5;
-// While the spin winds down the solid breathes in quick pulses. The last two
-// pulses grow, and the last one collapses into a half-size sphere.
-const SHAKES = Array.from({ length: 7 }, (_, i) => ({ dur: 0.3, amp: 0.02 + 0.03 * i / 6 }))
-  .concat({ dur: 0.36, amp: 0.11 }, { dur: 0.9, amp: 0.2, last: true });
-const SHAKE_GAIN = reduceMotion ? 0.25 : 1;
+// While the spin winds down the solid breathes in quick pulses that slow and
+// grow. The collapse starts exactly on the crest of the last, biggest pulse
+// (both have zero velocity there) and glides into a half-size sphere.
+const SHAKE = {
+  dur: 3.4,          // whole wind-down
+  collapseAt: 2.6,   // crest of the last pulse
+  cycles: 7.25,      // pulses before the collapse; .25 lands on a crest
+  f0: 3.4,           // starting pulse rate, Hz
+  amp0: 0.02, ampGrow: 0.2,
+  gain: reduceMotion ? 0.25 : 1,
+};
 const PHASES = [
   { id: 'cruise', dur: 0.8 },
   { id: 'accelerate', dur: 2.6 },
-  { id: 'decelerate', dur: SHAKES.reduce((a, c) => a + c.dur, 0) },
+  { id: 'decelerate', dur: SHAKE.dur },
   { id: 'emerge', dur: 1.3 },
 ];
 const easeInOut = u => u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
@@ -393,19 +399,17 @@ function enterPhase(i) {
 }
 
 // size and sphere amount over the shaking wind-down
+const smootherstep = x => (x = Math.min(1, Math.max(0, x)), x * x * x * (x * (6 * x - 15) + 10));
 function shakeAt(t) {
-  let t0 = 0;
-  for (const c of SHAKES) {
-    if (t < t0 + c.dur || c.last) {
-      const x = Math.min(1, (t - t0) / c.dur);
-      if (!c.last) return { size: 1 + SHAKE_GAIN * c.amp * Math.sin(2 * Math.PI * x), s: 0 };
-      // last pulse: one big swell, then collapse into the sphere
-      if (x < 1 / 3) return { size: 1 + SHAKE_GAIN * c.amp * Math.sin(3 * Math.PI * x), s: 0 };
-      const v = easeInOut((x - 1 / 3) * 1.5);
-      return { size: 1 - (1 - MORPH_SHRINK) * v, s: v };
-    }
-    t0 += c.dur;
-  }
+  const { collapseAt: T, cycles, f0, amp0, ampGrow, gain } = SHAKE;
+  // pulse rate falls linearly from f0 so that exactly `cycles` fit before T
+  const f1 = 2 * cycles / T - f0;
+  const tt = Math.min(t, T);
+  const turns = f0 * tt + (f1 - f0) * tt * tt / (2 * T);   // holds on the crest after T
+  const amp = gain * smootherstep(t / 0.4) * (amp0 + ampGrow * Math.pow(tt / T, 4));
+  const pulse = 1 + amp * Math.sin(2 * Math.PI * turns);
+  const c = smootherstep((t - T) / (SHAKE.dur - T));
+  return { size: pulse + (MORPH_SHRINK - pulse) * c, s: c };
 }
 
 function step(dt) {
