@@ -79,6 +79,26 @@
   .solids .now { color: var(--ink); }
   .solids .now .w { color: var(--ink); }
   .solids .now::after { content: "now"; margin-left: auto; padding-right: 4px; font-size: 11px; color: var(--ink-faint); }
+  .field { display: grid; gap: 5px; margin: 4px 0 10px; }
+  .sub { color: var(--ink-dim); }
+  .seg { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .seg button {
+    all: unset; padding: 3px 8px; border: 1px solid var(--line); border-radius: 4px;
+    font-size: 12px; color: var(--ink-dim); cursor: pointer;
+  }
+  .seg button:hover { color: var(--ink); border-color: #353a48; }
+  .seg button[aria-pressed=true] { color: var(--ink); border-color: #5a6070; background: #1c2029; }
+  .seg button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .seg input[type=color] {
+    width: 26px; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 4px;
+    background: none; cursor: pointer;
+  }
+  .seg input[type=color]::-webkit-color-swatch-wrapper { padding: 2px; }
+  .seg input[type=color]::-webkit-color-swatch { border: 0; border-radius: 2px; }
+  .seg input[type=color]:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .check { display: flex; align-items: center; gap: 8px; margin: 2px 0 6px; color: var(--ink-dim); cursor: pointer; }
+  .check:hover { color: var(--ink); }
+  #tune .off { opacity: .4; }
   .solids-actions { display: flex; gap: 12px; margin: 6px 0 2px; }
   .solids-actions button {
     all: unset; font-size: 12px; color: var(--ink-faint); cursor: pointer;
@@ -361,7 +381,7 @@ function buildShape(w) {
   lgeo.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
   lgeo.morphAttributes.position = [new THREE.Float32BufferAttribute(lm, 3)];
 
-  return { w, m, geo, lgeo, color: new THREE.Color(FAMILY_COLOR[m.group] || '#9aa3b5') };
+  return { w, m, geo, lgeo };
 }
 
 // ---------- scene ----------
@@ -391,17 +411,64 @@ scene.add(rim);
 
 const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
 
-const material = new THREE.MeshPhysicalMaterial({
-  color: 0xffffff, roughness: 0.3, metalness: 0.12,
-  clearcoat: 1, clearcoatRoughness: 0.12,
-  iridescence: 0.35, iridescenceIOR: 1.6, iridescenceThicknessRange: [180, 520],
-  polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
-});
+// ---------- look ----------
+
+const STYLES = { solid: 'Solid', wire: 'Wireframe', glass: 'Glass', chrome: 'Chrome' };
+const COLOR_MODES = { family: 'Family', solid: 'Per solid', cycle: 'Cycling', rainbow: 'Rainbow', single: 'Single' };
+const LOOK_DEFAULTS = { style: 'solid', edges: true, color: 'family', tint: '#d9a441' };
+const look = { ...LOOK_DEFAULTS };
+{
+  const q = new URLSearchParams(location.search);
+  if (q.get('style') in STYLES) look.style = q.get('style');
+  if (q.get('color') in COLOR_MODES) look.color = q.get('color');
+  if (q.has('edges')) look.edges = q.get('edges') !== '0';
+  if (/^[0-9a-f]{6}$/i.test(q.get('tint') || '')) look.tint = '#' + q.get('tint').toLowerCase();
+}
+
+// Rainbow colour mode: a shader hook tints each facet by the direction it faces,
+// fading to plain as the solid becomes the sphere so the swap there stays invisible.
+const facetUniforms = { uFacet: { value: 0 }, uMorph: { value: 0 } };
+function withFacets(m) {
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, facetUniforms);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vFacet;')
+      .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvFacet = 0.5 + 0.5 * normalize(normal);');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vFacet;\nuniform float uFacet, uMorph;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= mix(vec3(1.0), mix(vFacet, vec3(1.0), 0.12), uFacet * (1.0 - uMorph));');
+  };
+  m.customProgramCacheKey = () => 'facets';
+  return m;
+}
+const offset = { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 };
+const MATERIALS = {
+  solid: withFacets(new THREE.MeshPhysicalMaterial({
+    roughness: 0.3, metalness: 0.12, clearcoat: 1, clearcoatRoughness: 0.12,
+    iridescence: 0.35, iridescenceIOR: 1.6, iridescenceThicknessRange: [180, 520], ...offset,
+  })),
+  // faint skin so the sphere still reads while the edges fade at the swap
+  wire: withFacets(new THREE.MeshPhysicalMaterial({ roughness: 0.4, transparent: true, opacity: 0.07, depthWrite: false })),
+  glass: withFacets(new THREE.MeshPhysicalMaterial({
+    roughness: 0.05, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.03, envMapIntensity: 1.5,
+    transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide,
+  })),
+  chrome: withFacets(new THREE.MeshPhysicalMaterial({
+    roughness: 0.06, metalness: 1, clearcoat: 1, clearcoatRoughness: 0.03, ...offset,
+  })),
+};
+// edge line colour and strength per style (wireframe lines take the solid's colour)
+const LINE_LOOK = {
+  solid: { color: 0x0b0d12, opacity: 0.5 },
+  wire: { color: null, opacity: 0.95 },
+  glass: { color: 0xf4f1ea, opacity: 0.35 },
+  chrome: { color: 0x0b0d12, opacity: 0.6 },
+};
 const lineMaterial = new THREE.LineBasicMaterial({ color: 0x0b0d12, transparent: true, opacity: 0.5 });
 
 const pivot = new THREE.Group();
 scene.add(pivot);
-const mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
+const mesh = new THREE.Mesh(new THREE.BufferGeometry(), MATERIALS.solid);
 const lines = new THREE.LineSegments(new THREE.BufferGeometry(), lineMaterial);
 pivot.add(mesh, lines);
 
@@ -409,11 +476,44 @@ function show(shape) {
   mesh.geometry = shape.geo; lines.geometry = shape.lgeo;
   mesh.updateMorphTargets(); lines.updateMorphTargets();
 }
+let morphS = 0;
 function setMorph(s) {
+  morphS = s;
   mesh.morphTargetInfluences[0] = s;
   lines.morphTargetInfluences[0] = s;
-  lineMaterial.opacity = 0.5 * Math.pow(1 - s, 3);
-  lines.visible = s < 0.98;
+  facetUniforms.uMorph.value = s;
+  const wire = look.style === 'wire';
+  // solid edges melt away early; wireframe edges hold until just before the sphere
+  const fade = wire ? 1 - THREE.MathUtils.smoothstep(s, 0.75, 1) : Math.pow(1 - s, 3);
+  lineMaterial.opacity = LINE_LOOK[look.style].opacity * fade;
+  lines.visible = (wire || look.edges) && lineMaterial.opacity > 0.01;
+}
+function applyLook() {
+  mesh.material = MATERIALS[look.style];
+  facetUniforms.uFacet.value = look.color === 'rainbow' ? 1 : 0;
+  const L = LINE_LOOK[look.style];
+  if (L.color !== null) lineMaterial.color.set(L.color);
+  setMorph(morphS);
+}
+
+const WHITE = new THREE.Color(1, 1, 1), RAINBOW_BASE = new THREE.Color('#f2efe8');
+function colorOf(w, out) {
+  switch (look.color) {
+    case 'solid': return out.setHSL((w * 0.618034) % 1, 0.55, 0.56, THREE.SRGBColorSpace);
+    case 'cycle': return out.setHSL((clockT * 0.03) % 1, 0.55, 0.56, THREE.SRGBColorSpace);
+    case 'single': return out.set(look.tint);
+    case 'rainbow': return out.copy(RAINBOW_BASE);
+    default: return out.set(FAMILY_COLOR[byW.get(w).group] || '#9aa3b5');
+  }
+}
+const colA = new THREE.Color(), colB = new THREE.Color();
+function paintColor(wFrom, wTo, t) {
+  const c = colorOf(wFrom, colA).lerp(colorOf(wTo, colB), t);
+  const mat = mesh.material;
+  mat.color.copy(c);
+  if (look.style === 'chrome') mat.color.lerp(WHITE, 0.45);
+  if (look.style === 'wire') lineMaterial.color.copy(c).lerp(WHITE, 0.2);
+  MATERIALS.glass.opacity = cfg.glass / 100;
 }
 
 function resize() {
@@ -438,6 +538,8 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // The collapse starts exactly on the crest of the last, biggest pulse (both
 // have zero velocity there) and glides into the sphere.
 const PARAMS = [
+  { group: 'Look' },
+  { k: 'glass',    label: 'Glass opacity', unit: '%', min: 5, max: 90, step: 1, def: 30 },
   { group: 'Timing' },
   { k: 'cruise',   label: 'Slow spin',   unit: 's', min: 0,    max: 5,  step: 0.1,  def: 0.8 },
   { k: 'accel',    label: 'Speed up',    unit: 's', min: 0.3,  max: 6,  step: 0.1,  def: 2.6 },
@@ -530,13 +632,15 @@ let current = shapeFor(byW.has(hashW) ? hashW : startPool[Math.floor(Math.random
 let nextW = pickNext(current.w);
 idle(() => shapeFor(nextW));
 show(current);
+applyLook();
 setMorph(0);
-material.color.copy(current.color);
 
 let phase = 0, phaseT = 0, omega = wSlow(), decelFrom = wFast(), prevW = current.w, paused = false;
 const axis = new THREE.Vector3(), dq = new THREE.Quaternion();
 let clockT = 0;
-const fromColor = new THREE.Color(), hud = {
+// colour blends from one solid's colour to the next across the morph
+let colorFrom = current.w, colorTo = current.w, colorMix = 0;
+const hud = {
   code: document.getElementById('code'), name: document.getElementById('name'), phase: document.getElementById('phase'),
 };
 
@@ -553,7 +657,7 @@ let hudFor = null;
 function enterPhase(i) {
   phase = i % PHASES.length; phaseT = 0;
   const id = PHASES[phase].id;
-  if (id === 'decelerate') { shapeFor(nextW); fromColor.copy(current.color); decelFrom = Math.max(omega, wSlow()); }
+  if (id === 'decelerate') { shapeFor(nextW); colorFrom = current.w; colorTo = nextW; decelFrom = Math.max(omega, wSlow()); }
   if (id === 'emerge') {
     // the old solid is a sphere now; swap in the next one, also a sphere at this point
     // (only the current and next solids stay in memory; the dense meshes are large)
@@ -598,19 +702,20 @@ function step(dt) {
     const k = shakeAt(phaseT);
     size = k.size;
     setMorph(k.s);
-    material.color.copy(fromColor).lerp(shapeFor(nextW).color, 0.5 * k.s);
+    colorMix = 0.5 * k.s;
   } else {
     omega = wSlow();
     // jump out to full size (with overshoot) as the next solid snaps into shape
     const v = Math.max(0, (u - 0.06) / 0.94), sphere = cfg.sphere / 100;
     setMorph(1 - easeOutCubic(v));
     size = sphere + (1 - sphere) * easeOutBack(Math.min(1, v / 0.75));
-    material.color.copy(fromColor).lerp(current.color, 0.5 + 0.5 * easeOutCubic(v));
+    colorMix = 0.5 + 0.5 * easeOutCubic(v);
   }
   pivot.scale.setScalar(size);
   if (u >= 1) {
     if (P.id === 'emerge') {
       setMorph(0);
+      colorFrom = colorTo = current.w; colorMix = 0;
       nextW = pickNext(current.w);
       idle(() => shapeFor(nextW));
     }
@@ -719,11 +824,59 @@ function syncSolids() {
 }
 syncSolids();
 
+// Look: style and colour chips, edge toggle (the glass slider follows from PARAMS)
+const lookCtl = {};
+function chips(label, options, key) {
+  const wrap = document.createElement('div');
+  wrap.className = 'field';
+  const name = Object.assign(document.createElement('span'), { className: 'sub', textContent: label });
+  const seg = document.createElement('div');
+  seg.className = 'seg'; seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', label);
+  for (const [value, text] of Object.entries(options)) {
+    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: text });
+    b.dataset.value = value;
+    b.addEventListener('click', () => { look[key] = value; syncLook(); });
+    seg.append(b);
+  }
+  wrap.append(name, seg);
+  lookCtl[key] = seg;
+  return wrap;
+}
+function buildLook() {
+  const colorField = chips('Colour', COLOR_MODES, 'color');
+  const tint = Object.assign(document.createElement('input'), { type: 'color', value: look.tint, title: 'Single colour' });
+  tint.setAttribute('aria-label', 'Single colour');
+  tint.addEventListener('input', () => { look.tint = tint.value; });
+  colorField.querySelector('.seg').append(tint);
+  lookCtl.tint = tint;
+  const edges = document.createElement('label');
+  edges.className = 'check';
+  const edgesBox = Object.assign(document.createElement('input'), { type: 'checkbox' });
+  edgesBox.addEventListener('change', () => { look.edges = edgesBox.checked; syncLook(); });
+  edges.append(edgesBox, 'Edge lines');
+  lookCtl.edges = edgesBox;
+  tuneBody.append(chips('Style', STYLES, 'style'), colorField, edges);
+}
+function syncLook() {
+  for (const key of ['style', 'color'])
+    for (const b of lookCtl[key].children)
+      if (b.dataset.value) b.setAttribute('aria-pressed', b.dataset.value === look[key]);
+  lookCtl.tint.hidden = look.color !== 'single';
+  lookCtl.tint.value = look.tint;
+  // wireframe is all edges, so the toggle has nothing to switch there
+  lookCtl.edges.checked = look.edges || look.style === 'wire';
+  lookCtl.edges.disabled = look.style === 'wire';
+  lookCtl.edges.parentElement.classList.toggle('off', look.style === 'wire');
+  inputs.get('glass')?.row.classList.toggle('off', look.style !== 'glass');
+  applyLook();
+}
+
 for (const p of PARAMS) {
   if (p.group) {
     const h = document.createElement('h3');
     h.textContent = p.group;
     tuneBody.append(h);
+    if (p.group === 'Look') buildLook();
     continue;
   }
   const row = document.createElement('label');
@@ -734,12 +887,17 @@ for (const p of PARAMS) {
   input.addEventListener('input', () => { cfg[p.k] = +input.value; paintSlider(p); });
   row.append(name, out, input);
   tuneBody.append(row);
-  inputs.set(p.k, { input, out });
+  inputs.set(p.k, { input, out, row });
   paintSlider(p);
 }
+syncLook();
 const resetBtn = document.createElement('button');
 resetBtn.type = 'button'; resetBtn.className = 'reset'; resetBtn.textContent = 'Reset to defaults';
-resetBtn.addEventListener('click', () => SLIDERS.forEach(p => { cfg[p.k] = p.def; paintSlider(p); }));
+resetBtn.addEventListener('click', () => {
+  SLIDERS.forEach(p => { cfg[p.k] = p.def; paintSlider(p); });
+  Object.assign(look, LOOK_DEFAULTS);
+  syncLook();
+});
 tuneBody.append(resetBtn);
 
 const foldBtn = tune.querySelector('button');
@@ -758,6 +916,8 @@ const copyState = document.getElementById('copyState');
 let copyTimer;
 document.getElementById('copyLink').addEventListener('click', async () => {
   const q = new URLSearchParams(SLIDERS.map(p => [p.k, String(cfg[p.k])]));
+  q.set('style', look.style); q.set('edges', look.edges ? '1' : '0');
+  q.set('color', look.color); q.set('tint', look.tint.slice(1));
   q.set('solids', encodeSet(enabled));
   const url = `${location.href.split(/[?#]/)[0]}?${q}#w${current.w}`;
   let ok = false;
@@ -785,6 +945,7 @@ function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   if (!paused) step(dt);
+  paintColor(colorFrom, colorTo, colorMix);
   updateHud();
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
