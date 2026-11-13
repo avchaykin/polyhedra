@@ -439,19 +439,23 @@ function withFacets(m) {
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvFacet = 0.5 + 0.5 * normalize(normal);');
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vFacet;\nuniform float uFacet, uMorph;')
+      // Folded parts of a morphing solid turn their back side out (most on the sphere
+      // itself). Both sides are drawn and every face is lit as if it faced the viewer,
+      // so those parts shade like the surface around them instead of going black.
+      .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\nif (dot(normal, vViewPosition) < 0.0) normal = -normal;\nnonPerturbedNormal = normal;')
       .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= mix(vec3(1.0), mix(vFacet, vec3(1.0), 0.12), uFacet * (1.0 - uMorph));');
   };
-  m.customProgramCacheKey = () => 'facets';
+  m.customProgramCacheKey = () => 'facets-2side';
   return m;
 }
-const offset = { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 };
+const offset = { side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 };
 const MATERIALS = {
   solid: withFacets(new THREE.MeshPhysicalMaterial({
     roughness: 0.3, metalness: 0.12, clearcoat: 1, clearcoatRoughness: 0.12,
     iridescence: 0.35, iridescenceIOR: 1.6, iridescenceThicknessRange: [180, 520], ...offset,
   })),
   // faint skin so the sphere still reads while the edges fade at the swap
-  wire: withFacets(new THREE.MeshPhysicalMaterial({ roughness: 0.4, transparent: true, opacity: 0.07, depthWrite: false })),
+  wire: withFacets(new THREE.MeshPhysicalMaterial({ roughness: 0.4, transparent: true, opacity: 0.07, depthWrite: false, side: THREE.DoubleSide })),
   glass: withFacets(new THREE.MeshPhysicalMaterial({
     roughness: 0.05, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.03, envMapIntensity: 1.5,
     transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide,
