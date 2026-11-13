@@ -325,6 +325,7 @@ const SHAKE = {
   cycles: 7.25,      // pulses before the collapse; .25 lands on a crest
   f0: 3.4,           // starting pulse rate, Hz
   amp0: 0.02, ampGrow: 0.2,
+  preMorph: 0.5,     // deepest partial morph, at the last trough
   gain: reduceMotion ? 0.25 : 1,
 };
 const PHASES = [
@@ -408,8 +409,12 @@ function shakeAt(t) {
   const turns = f0 * tt + (f1 - f0) * tt * tt / (2 * T);   // holds on the crest after T
   const amp = gain * smootherstep(t / 0.4) * (amp0 + ampGrow * Math.pow(tt / T, 4));
   const pulse = 1 + amp * Math.sin(2 * Math.PI * turns);
+  // over the last three pulses each contraction dips part-way toward the sphere
+  // (deeper every time) and springs back on the swell; zero on every crest
+  const depth = SHAKE.preMorph * smootherstep((turns - (cycles - 3.25)) / 3);
+  const dip = Math.pow((1 - Math.sin(2 * Math.PI * turns)) / 2, 2);
   const c = smootherstep((t - T) / (SHAKE.dur - T));
-  return { size: pulse + (MORPH_SHRINK - pulse) * c, s: c };
+  return { size: pulse + (MORPH_SHRINK - pulse) * c, s: depth * dip * (1 - c) + c };
 }
 
 function step(dt) {
