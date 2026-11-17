@@ -123,7 +123,7 @@
   /* tuning panel */
   #tune {
     position: fixed; left: 16px; top: 118px; z-index: 3; width: min(260px, calc(100vw - 32px));
-    max-height: calc(100dvh - 172px); display: flex; flex-direction: column;
+    max-height: calc(100dvh - 166px - var(--tl-h, 0px)); display: flex; flex-direction: column;
     background: rgb(13 15 21 / .82); border: 1px solid var(--line); border-radius: 8px;
   }
   #tune > button {
@@ -172,6 +172,69 @@
   }
   input[type=range]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--focus); }
 
+  /* timeline */
+  #timeline {
+    position: fixed; left: 16px; right: 16px; bottom: 40px; z-index: 3;
+    background: rgb(13 15 21 / .9); border: 1px solid var(--line); border-radius: 8px;
+  }
+  .tl-head { display: flex; align-items: center; gap: 14px; padding-right: 14px; }
+  .tl-fold {
+    all: unset; display: flex; align-items: center; gap: 8px; padding: 9px 4px 9px 14px;
+    color: var(--ink-dim); font-weight: 500; cursor: pointer; border-radius: 6px;
+  }
+  .tl-fold:hover { color: var(--ink); }
+  .tl-fold:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+  .tl-fold svg { transform: rotate(180deg); transition: transform .2s cubic-bezier(.2, .8, .2, 1); }
+  #timeline.open .tl-fold svg { transform: none; }
+  .tl-note { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-faint); font-size: 12px; }
+  .tl-actions { display: flex; gap: 14px; }
+  .tl-actions button, .tl-inspect .del {
+    all: unset; font-size: 12px; color: var(--ink-dim); cursor: pointer; white-space: nowrap;
+    text-decoration: underline; text-underline-offset: 3px; text-decoration-color: #3a3f4c;
+  }
+  .tl-actions button:hover, .tl-inspect .del:hover { color: var(--ink); }
+  .tl-actions button:focus-visible, .tl-inspect .del:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
+  .tl-actions button[hidden] { display: none; }
+  .tl-body { display: none; padding: 0 14px 10px; }
+  #timeline.open .tl-body { display: block; }
+  .tl-grid { display: grid; grid-template-columns: 116px 1fr; }
+  .tl-labels > div { height: 30px; display: flex; flex-direction: column; justify-content: center; line-height: 1.25; }
+  .tl-labels > div:first-child { height: 28px; color: var(--ink-faint); font-size: 11px; }
+  .tl-labels span { color: var(--ink-dim); font-size: 12px; }
+  .tl-labels output { font: 500 11px "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; color: var(--ink-faint); }
+  #tlSvg { display: block; width: 100%; height: 208px; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #tlSvg .ph { fill: rgb(255 255 255 / .03); }
+  #tlSvg .ph.alt { fill: rgb(255 255 255 / .055); }
+  #tlSvg .ph-text { fill: var(--ink-dim); font: 400 11px Inter, system-ui, sans-serif; pointer-events: none; }
+  #tlSvg .ph-dur { fill: var(--ink-faint); font: 500 10px "JetBrains Mono", ui-monospace, monospace; pointer-events: none; }
+  #tlSvg .seek { fill: transparent; cursor: pointer; }
+  #tlSvg .edge { stroke: #3a3f4c; stroke-width: 1; pointer-events: none; }
+  #tlSvg .edge-hit { fill: transparent; cursor: ew-resize; }
+  #tlSvg .edge-hit:hover + .edge-grip, #tlSvg .edge-grip.on { fill: var(--ink); }
+  #tlSvg .edge-grip { fill: #5a6070; pointer-events: none; }
+  #tlSvg .row { fill: transparent; cursor: copy; }
+  #tlSvg .base { stroke: var(--line); stroke-width: 1; pointer-events: none; }
+  #tlSvg .curve { fill: none; stroke: var(--ink-faint); stroke-width: 1.25; pointer-events: none; }
+  #timeline.live #tlSvg .curve { stroke: var(--ink-dim); }
+  #tlSvg .key { fill: var(--ink); cursor: grab; }
+  #tlSvg .key.swap { fill: #8fa2c8; }
+  #tlSvg .key.sel { fill: #fff; stroke: var(--focus); stroke-width: 3; paint-order: stroke; }
+  #tlSvg .key-hit { fill: transparent; cursor: grab; }
+  #tlSvg .head { stroke: var(--ink); stroke-width: 1; opacity: .7; pointer-events: none; }
+  .tl-inspect {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-height: 30px;
+    margin-top: 6px; padding-top: 7px; border-top: 1px solid var(--line); color: var(--ink-dim); font-size: 12px;
+  }
+  .tl-inspect b { color: var(--ink); font-weight: 500; }
+  .tl-inspect label { display: flex; align-items: center; gap: 6px; }
+  .tl-inspect input[type=number] {
+    width: 66px; padding: 3px 5px; border: 1px solid var(--line); border-radius: 4px; background: transparent;
+    color: var(--ink); font: 500 11px "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums;
+  }
+  .tl-inspect input[type=number]:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .tl-inspect input:disabled { opacity: .45; }
+  .tl-inspect .hint { color: var(--ink-faint); }
+  @media (max-width: 700px) { .tl-actions button:not(#tlUse) { display: none; } .tl-grid { grid-template-columns: 84px 1fr; } }
   .foot-left { position: fixed; left: 16px; bottom: 14px; z-index: 2; display: flex; gap: 10px; align-items: center; font-size: 12px; }
   .foot-left button {
     all: unset; cursor: pointer; color: var(--ink-dim);
@@ -199,6 +262,23 @@
     <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
   </button>
   <div class="body" id="tuneBody"></div>
+</section>
+<section id="timeline" aria-label="Timeline">
+  <div class="tl-head">
+    <button type="button" class="tl-fold" aria-expanded="false" aria-controls="tlBody">Timeline
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5 6 7.5 9 4.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <span class="tl-note" id="tlNote"></span>
+    <span class="tl-actions">
+      <button type="button" id="tlUse">Play timeline</button>
+      <button type="button" id="tlFromShake">From Shake</button>
+      <button type="button" id="tlFromSpin">From Spin</button>
+    </span>
+  </div>
+  <div class="tl-body" id="tlBody">
+    <div class="tl-grid"><div class="tl-labels" id="tlLabels"></div><svg id="tlSvg" aria-label="Keyframe tracks"></svg></div>
+    <div class="tl-inspect" id="tlInspect"></div>
+  </div>
 </section>
 <div class="foot-left">
   <button type="button" id="copyLink">Copy setup link</button>
@@ -415,7 +495,7 @@ const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100);
 
 const STYLES = { solid: 'Solid', wire: 'Wireframe', glass: 'Glass', chrome: 'Chrome' };
 const COLOR_MODES = { family: 'Family', solid: 'Per solid', cycle: 'Cycling', rainbow: 'Rainbow', single: 'Single' };
-const MOTIONS = { shake: 'Shake', spin: 'Spin' };
+const MOTIONS = { shake: 'Shake', spin: 'Spin', timeline: 'Timeline' };
 // look also carries the morph variation, so one object feeds the chips, reset and link
 const LOOK_DEFAULTS = { style: 'solid', edges: true, color: 'family', tint: '#d9a441', motion: 'shake' };
 const look = { ...LOOK_DEFAULTS };
@@ -523,14 +603,20 @@ function paintColor(wFrom, wTo, t) {
   MATERIALS.glass.opacity = cfg.glass / 100;
 }
 
+let viewReserve = 0;   // px at the bottom taken by the open timeline
+const floorEl = document.querySelector('.floor');
 function resize() {
-  const w = innerWidth, h = innerHeight;
+  const w = innerWidth, h = innerHeight, avail = Math.max(120, h - viewReserve);
   renderer.setSize(w, h, false);
-  camera.aspect = w / h;
+  // fit the solid into the area above the timeline: frame it for that area,
+  // then let the view run on below it so the canvas still fills the window
+  camera.aspect = w / avail;
   // keep a ~2.3-radius view in the shorter dimension
   const half = 2.3 / Math.min(1, camera.aspect);
   camera.position.set(0, 0.35, half / Math.tan(THREE.MathUtils.degToRad(15)));
   camera.lookAt(0, 0, 0);
+  if (viewReserve) camera.setViewOffset(w, avail, 0, 0, w, h); else camera.clearViewOffset();
+  floorEl.style.top = `${avail * 0.79}px`;
   camera.updateProjectionMatrix();
 }
 addEventListener('resize', resize);
@@ -656,10 +742,11 @@ const hud = {
 };
 
 function updateHud() {
-  const id = PHASES[phase].id;
+  const tl = motion === 'timeline';
+  const id = tl ? TL_PHASES[tlPhaseAt(tlT)].id : PHASES[phase].id;
   // the arrow shows while a morph is under way; the swap happens at the sphere
-  const before = motion === 'spin' ? id === 'accelerate' : id === 'decelerate';
-  const after = motion === 'spin' ? id === 'decelerate' : id === 'emerge';
+  const before = tl ? !tlSwapped && morphS > 0.001 : motion === 'spin' ? id === 'accelerate' : id === 'decelerate';
+  const after = tl ? tlSwapped && morphS > 0.001 : motion === 'spin' ? id === 'decelerate' : id === 'emerge';
   hud.code.textContent = before ? `W${current.w} → W${nextW}` : after ? `W${prevW} → W${current.w}` : `W${current.w}`;
   hud.name.textContent = current.m.name;
   hud.phase.textContent = `${paused ? 'paused' : id} · ${motion} · ω ${omega.toFixed(2)}`;
@@ -694,7 +781,7 @@ function beginMorph() {
 function enterPhase(i) {
   phase = i % PHASES.length; phaseT = 0;
   const id = PHASES[phase].id;
-  if (id === 'cruise') motion = look.motion;
+  if (id === 'cruise') { motion = look.motion; if (motion === 'timeline') startTimelineCycle(); }
   if (id === 'decelerate') decelFrom = Math.max(omega, wSlow());
   if (motion === 'spin') {
     if (id === 'accelerate') beginMorph();
@@ -727,6 +814,7 @@ function shakeAt(t) {
 }
 
 function step(dt) {
+  if (motion === 'timeline') { stepTimeline(dt); spin(dt); return; }
   phaseT += dt;
   const P = PHASES[phase], u = Math.min(1, phaseT / P.dur());
   const sphere = cfg.sphere / 100;
@@ -769,6 +857,10 @@ function step(dt) {
     else enterPhase(phase + 1);
   }
 
+  spin(dt);
+}
+
+function spin(dt) {
   clockT += dt;
   axis.set(0.32 * Math.sin(clockT * 0.11), 1, 0.32 * Math.cos(clockT * 0.07)).normalize();
   dq.setFromAxisAngle(axis, omega * dt);
@@ -846,7 +938,8 @@ keepBox.addEventListener('change', () => setEnabled([current.w], keepBox.checked
 function setEnabled(ws, on) {
   for (const w of ws) on ? enabled.add(w) : enabled.delete(w);
   // the planned next solid was just removed: choose again, unless the morph toward it has begun
-  const id = PHASES[phase].id, begun = id === 'decelerate' || id === 'emerge' || (motion === 'spin' && id === 'accelerate');
+  const id = PHASES[phase].id, begun = motion === 'timeline' ? tlSwapped || morphS > 0.001
+    : id === 'decelerate' || id === 'emerge' || (motion === 'spin' && id === 'accelerate');
   if (!enabled.has(nextW) && nextW !== current.w && !begun) {
     const dropped = cache.get(nextW);
     if (dropped) { cache.delete(nextW); dropped.geo.dispose(); dropped.lgeo.dispose(); }
@@ -874,6 +967,7 @@ syncSolids();
 
 // Look: style and colour chips, edge toggle (the glass slider follows from PARAMS)
 const lookCtl = {};
+let onLookChange = () => {};   // set by the timeline
 function chips(label, options, key) {
   const wrap = document.createElement('div');
   wrap.className = 'field';
@@ -916,15 +1010,22 @@ function syncLook() {
   lookCtl.edges.disabled = look.style === 'wire';
   lookCtl.edges.parentElement.classList.toggle('off', look.style === 'wire');
   inputs.get('glass')?.row.classList.toggle('off', look.style !== 'glass');
-  // dim the sliders the chosen variation doesn't use
-  for (const p of SLIDERS) if (p.motion || SHAKE_ONLY.has(p.k))
-    inputs.get(p.k)?.row.classList.toggle('off', (p.motion || 'shake') !== look.motion);
-  for (const h of tuneBody.querySelectorAll('h3')) if (h.textContent === 'Shake') h.classList.toggle('off', look.motion !== 'shake');
+  // dim the sliders the chosen variation doesn't use (the timeline has its own tracks)
+  const used = p => look.motion === 'timeline' ? ['glass', 'bounce'].includes(p.k)
+    : p.motion ? p.motion === look.motion : SHAKE_ONLY.has(p.k) ? look.motion === 'shake' : true;
+  for (const p of SLIDERS) if (p.k !== 'glass') inputs.get(p.k)?.row.classList.toggle('off', !used(p));
+  for (const h of tuneBody.querySelectorAll('h3'))
+    if (['Spin', 'Shake', 'Size'].includes(h.textContent))
+      h.classList.toggle('off', !SLIDERS.some(p => p.groupName === h.textContent && used(p)));
   applyLook();
+  onLookChange();
 }
 
+let groupName = '';
 for (const p of PARAMS) {
+  p.groupName = p.group || groupName;
   if (p.group) {
+    groupName = p.group;
     const h = document.createElement('h3');
     h.textContent = p.group;
     tuneBody.append(h);
@@ -972,6 +1073,7 @@ document.getElementById('copyLink').addEventListener('click', async () => {
   q.set('style', look.style); q.set('edges', look.edges ? '1' : '0');
   q.set('color', look.color); q.set('tint', look.tint.slice(1)); q.set('motion', look.motion);
   q.set('solids', encodeSet(enabled));
+  q.set('tl', encodeTL(TL));
   const url = `${location.href.split(/[?#]/)[0]}?${q}#w${current.w}`;
   let ok = false;
   try { await navigator.clipboard.writeText(url); ok = true; } catch {
@@ -986,14 +1088,421 @@ document.getElementById('copyLink').addEventListener('click', async () => {
   copyTimer = setTimeout(() => { copyState.textContent = ''; }, 2200);
 });
 
+// ---------- timeline ----------
+// The Timeline variation plays keyframes instead of the Shake / Spin formulas.
+// A key belongs to a phase (p) at a fraction of it (u), so retiming a phase
+// stretches its keys. The morph track holds one locked swap key at 100%: there
+// the next solid, also a sphere at that moment, takes over.
+
+const TL_PHASES = [
+  { id: 'cruise', label: 'Slow spin' },
+  { id: 'accelerate', label: 'Speed up' },
+  { id: 'decelerate', label: 'Slow down' },
+  { id: 'emerge', label: 'Morph out' },
+];
+const TL_TRACKS = [
+  { k: 'speed', label: 'Speed',      unit: 'rad/s', min: 0, max: 15,  step: 0.05 },
+  { k: 'size',  label: 'Size',       unit: '%',     min: 0, max: 150, step: 1 },
+  { k: 'morph', label: 'Morph',      unit: '%',     min: 0, max: 100, step: 1 },
+  { k: 'shake', label: 'Shake',      unit: '%',     min: 0, max: 30,  step: 0.5 },
+  { k: 'rate',  label: 'Shake rate', unit: 'Hz',    min: 0, max: 10,  step: 0.1 },
+  { k: 'dip',   label: 'Dip',        unit: '%',     min: 0, max: 100, step: 1 },
+];
+const TRACK = Object.fromEntries(TL_TRACKS.map(t => [t.k, t]));
+const EASES = { smooth: 'Smooth', linear: 'Linear', in: 'Ease in', out: 'Ease out', back: 'Bounce' };
+const EASE_FN = { smooth: smootherstep, linear: x => x, in: x => x * x * x, out: easeOutCubic, back: x => easeOutBack(x) };
+const kf = (p, u, v, e = 'smooth', swap = false) => swap ? { p, u, v, e, swap } : { p, u, v, e };
+
+// Presets rebuild the timeline from the Shake or Spin sliders.
+function presetFromShake() {
+  const T = cfg.shake, D = cfg.shake + cfg.collapse, uT = T / D, sphere = cfg.sphere;
+  const cycles = cfg.pulses + 0.25, avg = cycles / T;
+  const f0 = Math.min(cfg.rate, 1.75 * avg), f1 = Math.max(0, 2 * avg - f0);
+  const turnsAt = t => f0 * t + (f1 - f0) * t * t / (2 * T);
+  let tDip = 0;
+  while (tDip < T && turnsAt(tDip) < cycles - cfg.preN - 0.25) tDip += 0.005;
+  const wS = cfg.wSlow, wF = cfg.wFast, back = 0.06 + 0.94 * 0.75;
+  return {
+    durs: [cfg.cruise, cfg.accel, D, cfg.emerge],
+    keys: {
+      speed: [kf(0, 0, wS), kf(1, 0, wS), kf(1, 1, wF), kf(2, 1, wS)],
+      size: [kf(0, 0, 100), kf(2, uT, 100), kf(2, 1, sphere), kf(3, 0.06, sphere), kf(3, back, 100, 'back')],
+      morph: [kf(0, 0, 0), kf(2, uT, 0), kf(2, 1, 100, 'smooth', true), kf(3, 0.06, 100, 'linear'), kf(3, 1, 0, 'out')],
+      shake: [kf(2, 0, 0), kf(2, Math.min(uT, 0.4 / D), cfg.amp0), kf(2, uT, cfg.amp0 + cfg.ampGrow, 'in'), kf(2, 1, 0)],
+      rate: [kf(2, 0, f0), kf(2, uT, f1, 'linear')],
+      dip: cfg.preN ? [kf(2, tDip / D, 0), kf(2, uT, cfg.preDepth), kf(2, 1, 0)] : [kf(0, 0, 0)],
+    },
+  };
+}
+function presetFromSpin() {
+  const share = cfg.spinIn / 100, sphere = cfg.sphere, wS = cfg.wSlow, wF = cfg.wFast;
+  return {
+    durs: [cfg.cruise, cfg.accel, cfg.slowdown, 0],
+    keys: {
+      speed: [kf(0, 0, wS), kf(1, 0, wS), kf(1, 1, wF), kf(2, 1, wS)],
+      size: [kf(0, 0, 100), kf(1, 1 - share, 100), kf(1, 1, sphere), kf(2, 1, 100, 'back')],
+      morph: [kf(0, 0, 0), kf(1, 1 - share, 0), kf(1, 1, 100, 'smooth', true), kf(2, 1, 0)],
+      shake: [kf(0, 0, 0)], rate: [kf(0, 0, 0)], dip: [kf(0, 0, 0)],
+    },
+  };
+}
+
+// Anything loaded from a link or storage is checked and repaired before use.
+function normalizeTL(tl) {
+  if (!tl || !Array.isArray(tl.durs) || tl.durs.length !== 4 || !tl.keys) return null;
+  const durs = tl.durs.map(d => Math.min(30, Math.max(0, +d || 0)));
+  if (durs.reduce((a, b) => a + b, 0) < 0.1) return null;
+  const keys = {};
+  for (const tr of TL_TRACKS) {
+    const list = (Array.isArray(tl.keys[tr.k]) ? tl.keys[tr.k] : [])
+      .filter(k => k && Number.isFinite(+k.p) && Number.isFinite(+k.u) && Number.isFinite(+k.v))
+      .map(k => kf(Math.min(3, Math.max(0, Math.round(k.p))), Math.min(1, Math.max(0, +k.u)),
+        Math.min(tr.max, Math.max(tr.min, +k.v)), k.e in EASES ? k.e : 'smooth', !!k.swap && tr.k === 'morph'));
+    keys[tr.k] = list.length ? list : [kf(0, 0, tr.k === 'size' ? 100 : 0)];
+  }
+  const swaps = keys.morph.filter(k => k.swap);
+  swaps.slice(1).forEach(k => delete k.swap);
+  if (!swaps.length) {
+    const top = keys.morph.reduce((a, b) => (b.v > a.v ? b : a));
+    top.swap = true;
+  }
+  keys.morph.find(k => k.swap).v = 100;
+  return { durs, keys };
+}
+
+// Links carry the timeline as compact JSON in base64url.
+function encodeTL(tl) {
+  const k = {};
+  for (const tr of TL_TRACKS)
+    k[tr.k] = tl.keys[tr.k].map(x => [x.p, +x.u.toFixed(4), +x.v.toFixed(3), Object.keys(EASES).indexOf(x.e), x.swap ? 1 : 0]);
+  const json = JSON.stringify({ d: tl.durs.map(d => +d.toFixed(3)), k });
+  return btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function decodeTL(str) {
+  try {
+    const o = JSON.parse(decodeURIComponent(escape(atob(str.replace(/-/g, '+').replace(/_/g, '/')))));
+    const keys = {};
+    for (const tr of TL_TRACKS)
+      keys[tr.k] = (o.k[tr.k] || []).map(([p, u, v, e, sw]) => kf(p, u, v, Object.keys(EASES)[e], !!sw));
+    return normalizeTL({ durs: o.d, keys });
+  } catch { return null; }
+}
+
+let TL = (query.has('tl') && decodeTL(query.get('tl'))) || (() => {
+  try { return normalizeTL(JSON.parse(localStorage.getItem('morph-timeline'))); } catch { return null; }
+})() || presetFromShake();
+
+function compileTL(tl) {
+  const starts = [];
+  let acc = 0;
+  for (const d of tl.durs) { starts.push(acc); acc += d; }
+  const total = Math.max(acc, 0.05);
+  const tracks = {};
+  for (const tr of TL_TRACKS)
+    tracks[tr.k] = tl.keys[tr.k].map(k => ({ t: starts[k.p] + k.u * tl.durs[k.p], v: k.v, e: k.e, key: k })).sort((a, b) => a.t - b.t);
+  const swapT = Math.min(tracks.morph.find(x => x.key.swap).t, total);
+  let firstRise = swapT;
+  for (let i = 0; i <= 300; i++) {
+    const t = swapT * i / 300;
+    if (evalTrack(tracks.morph, t) > 0.5) { firstRise = t; break; }
+  }
+  return { starts, total, tracks, swapT, firstRise };
+}
+function evalTrack(list, t) {
+  if (t <= list[0].t) return list[0].v;
+  for (let i = 1; i < list.length; i++) {
+    const a = list[i - 1], b = list[i];
+    if (t < b.t) return a.v + (b.v - a.v) * EASE_FN[b.e]((t - a.t) / (b.t - a.t));
+  }
+  return list[list.length - 1].v;
+}
+let tlC = compileTL(TL);
+function tlPhaseAt(t) {
+  let p = 0;
+  for (let i = 0; i < 4; i++) if (TL.durs[i] > 0 && t >= tlC.starts[i]) p = i;
+  return p;
+}
+
+// ---- playback ----
+let tlT = 0, tlTurns = 0, tlSwapped = false;
+function startTimelineCycle() {
+  tlT = 0; tlTurns = 0; tlSwapped = false;
+  colorFrom = current.w; colorTo = nextW; colorMix = 0;
+}
+function stepTimeline(dt) {
+  tlT += dt;
+  if (!tlSwapped && tlT >= tlC.swapT) { swapToNext(); tlSwapped = true; }
+  if (tlT >= tlC.total) { finishCycle(); enterPhase(0); return; }
+  const at = k => evalTrack(tlC.tracks[k], tlT);
+  omega = reduceMotion ? Math.min(at('speed'), 1.1) : at('speed');
+  tlTurns += at('rate') * dt;
+  const osc = Math.sin(2 * Math.PI * tlTurns), gain = reduceMotion ? 0.25 : 1;
+  // dip pulls each contraction part-way toward the sphere, as in the Shake variation
+  const m = Math.min(1, Math.max(0, at('morph') / 100 + at('dip') / 100 * Math.pow((1 - osc) / 2, 2)));
+  setMorph(m);
+  pivot.scale.setScalar(Math.max(0.01, at('size') / 100 * (1 + gain * at('shake') / 100 * osc)));
+  colorMix = tlSwapped ? 1 - 0.5 * m : 0.5 * m;
+}
+function seekTimeline(t) {
+  // the swap can't be undone, so after it the playhead stays past it
+  t = Math.min(tlC.total - 1e-3, Math.max(tlSwapped ? tlC.swapT : 0, t));
+  tlTurns = 0;
+  for (let i = 0, n = 200; i < n; i++) tlTurns += evalTrack(tlC.tracks.rate, t * (i + 0.5) / n) * t / n;
+  tlT = t;
+}
+
+// ---- editor ----
+const tlBox = document.getElementById('timeline'), svg = document.getElementById('tlSvg');
+const tlLabels = document.getElementById('tlLabels'), tlInspect = document.getElementById('tlInspect');
+const tlNote = document.getElementById('tlNote'), tlUse = document.getElementById('tlUse');
+const tlFold = tlBox.querySelector('.tl-fold');
+const SVGNS = 'http://www.w3.org/2000/svg', PAD = 8, PH = 28, RH = 30;
+let tlSel = null;   // { track, key }
+let drag = null;
+
+tlLabels.innerHTML = '<div>Phases</div>' + TL_TRACKS.map(t => `<div><span>${t.label}</span><output data-k="${t.k}"></output></div>`).join('');
+const tlOutputs = Object.fromEntries([...tlLabels.querySelectorAll('output')].map(o => [o.dataset.k, o]));
+const fmtV = (tr, v) => `${v.toFixed((String(tr.step).split('.')[1] || '').length)}${tr.unit === '%' ? '%' : ' ' + tr.unit}`;
+
+const geom = () => {
+  const W = svg.clientWidth, span = W - 2 * PAD;
+  return { W, X: t => PAD + t / tlC.total * span, T: x => Math.min(tlC.total, Math.max(0, (x - PAD) / span * tlC.total)), perPx: tlC.total / span };
+};
+const rowTop = r => PH + r * RH;
+const yOf = (tr, r, v) => rowTop(r) + RH - 5 - (v - tr.min) / (tr.max - tr.min) * (RH - 10);
+const vOf = (tr, r, y) => {
+  const v = tr.min + (rowTop(r) + RH - 5 - y) / (RH - 10) * (tr.max - tr.min);
+  return Math.min(tr.max, Math.max(tr.min, Math.round(v / tr.step) * tr.step));
+};
+
+function drawTL() {
+  const { W, X } = geom();
+  if (!W) return;
+  const H = PH + TL_TRACKS.length * RH;
+  let out = '';
+  // phases with draggable right edges
+  TL_PHASES.forEach((ph, i) => {
+    const x0 = X(tlC.starts[i]), x1 = X(tlC.starts[i] + TL.durs[i]), w = x1 - x0;
+    out += `<rect class="ph${i % 2 ? ' alt' : ''}" x="${x0}" y="0" width="${Math.max(0, w)}" height="${H}"/>`;
+    if (w > 46) out += `<text class="ph-text" x="${x0 + 6}" y="12">${w > 70 ? ph.label : ''}</text>`;
+    if (w > 30) out += `<text class="ph-dur" x="${x0 + 6}" y="23">${TL.durs[i].toFixed(2)} s</text>`;
+  });
+  out += `<rect class="seek" x="0" y="0" width="${W}" height="${PH}"/>`;
+  TL_TRACKS.forEach((tr, r) => {
+    const top = rowTop(r), list = tlC.tracks[tr.k];
+    out += `<rect class="row" data-r="${r}" x="0" y="${top}" width="${W}" height="${RH}"/>`;
+    out += `<line class="base" x1="0" x2="${W}" y1="${top + RH - 0.5}" y2="${top + RH - 0.5}"/>`;
+    let d = '';
+    for (let i = 0, n = Math.max(60, Math.round(W / 3)); i <= n; i++) {
+      const t = tlC.total * i / n;
+      d += `${i ? 'L' : 'M'}${X(t).toFixed(1)},${yOf(tr, r, evalTrack(list, t)).toFixed(1)}`;
+    }
+    out += `<path class="curve" d="${d}"/>`;
+    for (const x of list) {
+      const cx = X(x.t), cy = yOf(tr, r, x.v), sel = tlSel && tlSel.key === x.key;
+      const cls = `key${x.key.swap ? ' swap' : ''}${sel ? ' sel' : ''}`;
+      const i = TL.keys[tr.k].indexOf(x.key);
+      out += `<rect class="${cls}" x="-4" y="-4" width="8" height="8" rx="1" transform="translate(${cx} ${cy}) rotate(45)"><title>${tr.label} ${fmtV(tr, x.v)} at ${x.t.toFixed(2)} s${x.key.swap ? ' · swap' : ''}</title></rect>`;
+      out += `<rect class="key-hit" data-k="${tr.k}" data-i="${i}" x="${cx - 8}" y="${cy - 8}" width="16" height="16"/>`;
+    }
+  });
+  TL.durs.forEach((_, i) => {
+    const x = X(tlC.starts[i] + TL.durs[i]);
+    out += `<line class="edge" x1="${x}" x2="${x}" y1="0" y2="${H}"/>`;
+    out += `<rect class="edge-hit" data-edge="${i}" x="${x - 5}" y="0" width="10" height="${PH}"/>`;
+    out += `<rect class="edge-grip${drag && drag.type === 'edge' && drag.idx === i ? ' on' : ''}" x="${x - 1.5}" y="6" width="3" height="${PH - 12}" rx="1"/>`;
+  });
+  out += `<line class="head" id="tlHead" x1="-10" x2="-10" y1="0" y2="${H}"/>`;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = out;
+}
+
+function renderInspector() {
+  if (!tlSel) {
+    tlInspect.innerHTML = '<span class="hint">Drag a key to move it · double-click a track to add one · drag a phase edge to retime it · Delete removes the selected key</span>';
+    return;
+  }
+  const tr = TRACK[tlSel.track], k = tlSel.key, t = tlC.starts[k.p] + k.u * TL.durs[k.p];
+  tlInspect.innerHTML = '';
+  const title = document.createElement('span');
+  title.innerHTML = `<b>${tr.label}</b> key in ${TL_PHASES[k.p].label}`;
+  const num = (label, value, step, onChange, disabled) => {
+    const l = document.createElement('label');
+    const input = Object.assign(document.createElement('input'), { type: 'number', value, step, disabled });
+    input.addEventListener('change', () => onChange(+input.value));
+    l.append(label, input);
+    return l;
+  };
+  const time = num('Time', t.toFixed(2), 0.05, v => moveKey(tlSel.track, k, v, k.v), false);
+  const value = num(tr.unit === '%' ? 'Value, %' : `Value, ${tr.unit}`, +k.v.toFixed(3), tr.step, v => moveKey(tlSel.track, k, t, v), !!k.swap);
+  const seg = document.createElement('div');
+  seg.className = 'seg'; seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'Ease into this key');
+  for (const [e, text] of Object.entries(EASES)) {
+    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: text });
+    b.setAttribute('aria-pressed', k.e === e);
+    b.addEventListener('click', () => { k.e = e; tlChanged(); });
+    seg.append(b);
+  }
+  tlInspect.append(title, time, value, seg);
+  if (k.swap) {
+    tlInspect.append(Object.assign(document.createElement('span'), { className: 'hint', textContent: 'Swap key: the next solid takes over here' }));
+  } else {
+    const del = Object.assign(document.createElement('button'), { type: 'button', className: 'del', textContent: 'Delete key' });
+    del.disabled = TL.keys[tlSel.track].length < 2;
+    del.addEventListener('click', deleteSelectedKey);
+    tlInspect.append(del);
+  }
+}
+
+function selectKey(sel) { tlSel = sel; drawTL(); renderInspector(); }
+
+let saveTimer;
+function tlChanged({ inspector = true } = {}) {
+  tlC = compileTL(TL);
+  if (motion === 'timeline' && !tlSwapped && tlT > tlC.swapT) tlT = tlC.swapT;
+  // editing means you want to see it: switch to the timeline (from the next cycle)
+  if (look.motion !== 'timeline') { look.motion = 'timeline'; syncLook(); }
+  drawTL();
+  if (inspector) renderInspector();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { try { localStorage.setItem('morph-timeline', JSON.stringify(TL)); } catch {} }, 300);
+}
+
+// Move a key to absolute time t and value v, keeping it between its neighbours.
+function moveKey(trackK, k, t, v) {
+  const tr = TRACK[trackK], list = tlC.tracks[trackK], i = list.findIndex(x => x.key === k);
+  const lo = i > 0 ? list[i - 1].t : 0, hi = i < list.length - 1 ? list[i + 1].t : tlC.total;
+  t = Math.min(hi, Math.max(lo, t));
+  // place it in the phase that contains t (a key on a boundary stays in its own phase)
+  let p = tlPhaseAt(t);
+  if (TL.durs[k.p] > 0 && t >= tlC.starts[k.p] && t <= tlC.starts[k.p] + TL.durs[k.p]) p = k.p;
+  k.p = p;
+  k.u = TL.durs[p] > 0 ? Math.min(1, Math.max(0, (t - tlC.starts[p]) / TL.durs[p])) : 0;
+  if (!k.swap) k.v = Math.min(tr.max, Math.max(tr.min, v));
+  tlChanged({ inspector: !drag });
+}
+
+function deleteSelectedKey() {
+  if (!tlSel || tlSel.key.swap) return;
+  const list = TL.keys[tlSel.track];
+  if (list.length < 2) return;
+  list.splice(list.indexOf(tlSel.key), 1);
+  tlSel = null;
+  tlChanged();
+}
+
+svg.addEventListener('pointerdown', e => {
+  const el = e.target, { X, T } = geom(), rect = svg.getBoundingClientRect();
+  const px = e.clientX - rect.left, py = e.clientY - rect.top;
+  if (el.classList.contains('key-hit')) {
+    const k = TL.keys[el.dataset.k][+el.dataset.i];
+    tlSel = { track: el.dataset.k, key: k };
+    drag = { type: 'key', track: el.dataset.k, key: k, r: TL_TRACKS.findIndex(t => t.k === el.dataset.k) };
+  } else if (el.classList.contains('edge-hit')) {
+    // edges can coincide when a phase is empty: pick by the first move's direction
+    const cands = TL.durs.map((_, i) => i).filter(i => Math.abs(X(tlC.starts[i] + TL.durs[i]) - px) <= 5);
+    drag = { type: 'edge', cands, idx: null, x0: px, durs: TL.durs.slice(), perPx: geom().perPx };
+  } else if (el.classList.contains('seek')) {
+    if (motion === 'timeline') seekTimeline(T(px));
+    return;
+  } else {
+    if (tlSel) selectKey(null);
+    return;
+  }
+  svg.setPointerCapture(e.pointerId);
+  drawTL(); renderInspector();
+  e.preventDefault();
+});
+svg.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const { T } = geom(), rect = svg.getBoundingClientRect();
+  const px = e.clientX - rect.left, py = e.clientY - rect.top;
+  if (drag.type === 'key') {
+    moveKey(drag.track, drag.key, T(px), vOf(TRACK[drag.track], drag.r, py));
+  } else {
+    const dx = px - drag.x0;
+    if (drag.idx === null) {
+      if (Math.abs(dx) < 2) return;
+      drag.idx = dx > 0 ? Math.max(...drag.cands) : Math.min(...drag.cands);
+    }
+    // seconds per pixel is frozen at drag start so the edge tracks the pointer
+    TL.durs[drag.idx] = Math.round(Math.max(0, drag.durs[drag.idx] + dx * drag.perPx) * 20) / 20;
+    if (TL.durs.reduce((a, b) => a + b, 0) < 0.1) TL.durs[drag.idx] = 0.1;
+    tlChanged({ inspector: false });
+  }
+});
+const endDrag = () => { if (drag) { drag = null; drawTL(); renderInspector(); } };
+svg.addEventListener('pointerup', endDrag);
+svg.addEventListener('pointercancel', endDrag);
+svg.addEventListener('dblclick', e => {
+  if (!e.target.classList.contains('row')) return;
+  const r = +e.target.dataset.r, tr = TL_TRACKS[r], { T } = geom();
+  const t = T(e.clientX - svg.getBoundingClientRect().left);
+  const k = kf(0, 0, evalTrack(tlC.tracks[tr.k], t));
+  TL.keys[tr.k].push(k);
+  tlC = compileTL(TL);
+  tlSel = { track: tr.k, key: k };
+  moveKey(tr.k, k, t, k.v);
+  renderInspector();
+});
+
+document.getElementById('tlFromShake').addEventListener('click', () => { TL = presetFromShake(); tlSel = null; tlChanged(); });
+document.getElementById('tlFromSpin').addEventListener('click', () => { TL = presetFromSpin(); tlSel = null; tlChanged(); });
+tlUse.addEventListener('click', () => { look.motion = 'timeline'; syncLook(); });
+
+function setTLOpen(open) {
+  tlBox.classList.toggle('open', open);
+  tlFold.setAttribute('aria-expanded', open);
+  try { localStorage.setItem('morph-tl-open', open ? '1' : '0'); } catch {}
+  layoutTL();
+  drawTL();
+}
+function layoutTL() {
+  const h = tlBox.offsetHeight;
+  document.documentElement.style.setProperty('--tl-h', `${h}px`);
+  const reserve = tlBox.classList.contains('open') ? h + 40 : 0;
+  if (reserve !== viewReserve) { viewReserve = reserve; resize(); }
+}
+tlFold.addEventListener('click', () => setTLOpen(!tlBox.classList.contains('open')));
+new ResizeObserver(() => { layoutTL(); drawTL(); }).observe(tlBox);
+
+// Per frame: playhead, live values, and the status note.
+let lastNote = '';
+function tlFrame() {
+  const live = motion === 'timeline';
+  tlBox.classList.toggle('live', live);
+  let note;
+  if (look.motion !== 'timeline') note = `Not playing: ${MOTIONS[look.motion]} variation is active`;
+  else if (!live) note = 'Starts with the next cycle';
+  else note = `${tlC.total.toFixed(2)} s cycle · swap at ${tlC.swapT.toFixed(2)} s`;
+  if (note !== lastNote) { tlNote.textContent = lastNote = note; tlUse.hidden = look.motion === 'timeline'; }
+  if (!tlBox.classList.contains('open')) return;
+  const head = document.getElementById('tlHead');
+  if (head) {
+    const x = live ? geom().X(tlT) : -10;
+    head.setAttribute('x1', x); head.setAttribute('x2', x);
+  }
+  for (const tr of TL_TRACKS) tlOutputs[tr.k].value = live ? fmtV(tr, evalTrack(tlC.tracks[tr.k], tlT)) : '';
+}
+onLookChange = () => { lastNote = ''; };
+
+let tlSavedOpen = null;
+try { tlSavedOpen = localStorage.getItem('morph-tl-open'); } catch {}
+setTLOpen(tlSavedOpen === '1');
+renderInspector();
+if (motion === 'timeline') startTimelineCycle();
+
 addEventListener('keydown', e => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (tlSel && (e.key === 'Delete' || e.key === 'Backspace') && !e.target.closest?.('input')) { e.preventDefault(); deleteSelectedKey(); return; }
+  if (e.key === 'Escape' && tlSel) { selectKey(null); return; }
   if (e.target.closest?.('input, button, a')) return;   // let controls keep their own keys
   if (e.code === 'Space') { e.preventDefault(); paused = !paused; updateHud(); }
   else if (e.key === 'ArrowRight') {
     const id = PHASES[phase].id;
     if (motion === 'spin' && id === 'cruise') enterPhase(1);
     else if (motion === 'shake' && (id === 'cruise' || id === 'accelerate')) enterPhase(2);
+    else if (motion === 'timeline' && !tlSwapped && tlT < tlC.firstRise) seekTimeline(tlC.firstRise);
   }
 });
 
@@ -1004,6 +1513,7 @@ function frame(now) {
   if (!paused) step(dt);
   paintColor(colorFrom, colorTo, colorMix);
   updateHud();
+  tlFrame();
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }
