@@ -231,7 +231,9 @@
   #timeline.live #tlSvg .curve { stroke: var(--ink-dim); }
   #tlSvg .key { fill: var(--ink); cursor: grab; }
   #tlSvg .key.swap { fill: #8fa2c8; }
-  #tlSvg .key.sel { fill: #fff; stroke: var(--focus); stroke-width: 3; paint-order: stroke; }
+  #tlSvg .key.sel { fill: #fff; }
+  #tlSvg .key-ring { fill: none; stroke: #fff; stroke-width: 1.5; pointer-events: none; }
+  #tlSvg .key-guide { stroke: rgb(255 255 255 / .35); stroke-width: 1; stroke-dasharray: 2 3; pointer-events: none; }
   #tlSvg .key-hit { fill: transparent; cursor: grab; }
   #tlSvg .head { stroke: var(--ink); stroke-width: 1; opacity: .7; pointer-events: none; }
   .tl-inspect {
@@ -1343,6 +1345,8 @@ function drawTL() {
       const cx = X(x.t), cy = yOf(row, x.v), sel = tlSel && tlSel.key === x.key;
       const cls = `key${x.key.swap ? ' swap' : ''}${sel ? ' sel' : ''}`;
       const i = TL.keys[tr.k].indexOf(x.key);
+      if (sel) out += `<line class="key-guide" x1="${cx}" x2="${cx}" y1="${row.top}" y2="${row.top + row.h}"/>`
+        + `<rect class="key-ring" x="-7" y="-7" width="14" height="14" rx="1.5" transform="translate(${cx} ${cy}) rotate(45)"/>`;
       out += `<rect class="${cls}" x="-4" y="-4" width="8" height="8" rx="1" transform="translate(${cx} ${cy}) rotate(45)"><title>${tr.label} ${fmtV(tr, x.v)} at ${x.t.toFixed(2)} s${x.key.swap ? ' · swap' : ''}</title></rect>`;
       out += `<rect class="key-hit" data-k="${tr.k}" data-i="${i}" x="${cx - 8}" y="${cy - 8}" width="16" height="16"/>`;
     }
@@ -1378,13 +1382,20 @@ function renderInspector() {
   const value = num(tr.unit === '%' ? 'Value, %' : `Value, ${tr.unit}`, +k.v.toFixed(3), tr.step, v => moveKey(tlSel.track, k, t, v), !!k.swap);
   const seg = document.createElement('div');
   seg.className = 'seg'; seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'Ease into this key');
-  for (const [e, text] of Object.entries(EASES)) {
+  const easeLabel = Object.assign(document.createElement('span'), { textContent: 'Curve into key' });
+  // ease in and ease out combine (both = smooth, neither = linear); bounce replaces them
+  const easeIn = k.e === 'in' || k.e === 'smooth', easeOut = k.e === 'out' || k.e === 'smooth';
+  const fromFlags = (i, o) => i && o ? 'smooth' : i ? 'in' : o ? 'out' : 'linear';
+  const chip = (text, pressed, next) => {
     const b = Object.assign(document.createElement('button'), { type: 'button', textContent: text });
-    b.setAttribute('aria-pressed', k.e === e);
-    b.addEventListener('click', () => { k.e = e; tlChanged(); });
+    b.setAttribute('aria-pressed', pressed);
+    b.addEventListener('click', () => { k.e = next; tlChanged(); });
     seg.append(b);
-  }
-  tlInspect.append(title, time, value, seg);
+  };
+  chip('Ease in', easeIn, fromFlags(!easeIn, easeOut));
+  chip('Ease out', easeOut, fromFlags(easeIn, !easeOut));
+  chip('Bounce', k.e === 'back', k.e === 'back' ? 'smooth' : 'back');
+  tlInspect.append(title, time, value, easeLabel, seg);
   if (k.swap) {
     tlInspect.append(Object.assign(document.createElement('span'), { className: 'hint', textContent: 'Swap key: the next solid takes over here' }));
   } else {
@@ -1477,14 +1488,13 @@ svg.addEventListener('pointerup', endDrag);
 svg.addEventListener('pointercancel', endDrag);
 svg.addEventListener('dblclick', e => {
   if (!e.target.classList.contains('row')) return;
-  const tr = tlRows[+e.target.dataset.r].tr, { T } = geom();
-  const t = T(e.clientX - svg.getBoundingClientRect().left);
-  const k = kf(0, 0, evalTrack(tlC.tracks[tr.k], t));
+  const row = tlRows[+e.target.dataset.r], tr = row.tr, { T } = geom(), rect = svg.getBoundingClientRect();
+  const t = T(e.clientX - rect.left), p = tlPhaseAt(t);
+  // place it in its phase before compiling, so it lands between the right neighbours
+  const k = kf(p, TL.durs[p] > 0 ? (t - tlC.starts[p]) / TL.durs[p] : 0, vOf(row, e.clientY - rect.top));
   TL.keys[tr.k].push(k);
-  tlC = compileTL(TL);
   tlSel = { track: tr.k, key: k };
-  moveKey(tr.k, k, t, k.v);
-  renderInspector();
+  tlChanged();
 });
 
 document.getElementById('tlFromShake').addEventListener('click', () => { TL = presetFromShake(); tlSel = null; tlChanged(); });
