@@ -200,7 +200,20 @@
   .tl-grid { display: grid; grid-template-columns: 116px 1fr; }
   .tl-labels > div { height: 30px; display: flex; flex-direction: column; justify-content: center; line-height: 1.25; }
   .tl-labels > div:first-child { height: 28px; color: var(--ink-faint); font-size: 11px; }
-  .tl-labels span { color: var(--ink-dim); font-size: 12px; }
+  .tl-labels .tl-track {
+    all: unset; align-self: flex-start; color: var(--ink-dim); font-size: 12px; cursor: pointer;
+    text-decoration: underline dotted; text-underline-offset: 3px; text-decoration-color: #3a3f4c;
+  }
+  .tl-labels .tl-track:hover, .tl-labels .tl-track[aria-pressed=true] { color: var(--ink); }
+  .tl-labels .tl-track:focus-visible, .tl-labels .tl-all:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 2px; }
+  .tl-labels .focus { justify-content: flex-start; gap: 2px; padding-top: 6px; }
+  .tl-labels .tl-all {
+    all: unset; margin-top: 8px; align-self: flex-start; font-size: 12px; color: var(--ink-faint); cursor: pointer;
+    text-decoration: underline; text-underline-offset: 3px; text-decoration-color: #3a3f4c;
+  }
+  .tl-labels .tl-all:hover { color: var(--ink); }
+  #tlSvg .grid { stroke: rgb(255 255 255 / .06); stroke-width: 1; pointer-events: none; }
+  #tlSvg .grid-text { fill: var(--ink-faint); font: 500 10px "JetBrains Mono", ui-monospace, monospace; text-anchor: end; pointer-events: none; }
   .tl-labels output { font: 500 11px "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; color: var(--ink-faint); }
   #tlSvg { display: block; width: 100%; height: 208px; touch-action: none; user-select: none; -webkit-user-select: none; }
   #tlSvg .ph { fill: rgb(255 255 255 / .03); }
@@ -1260,18 +1273,40 @@ const SVGNS = 'http://www.w3.org/2000/svg', PAD = 8, PH = 28, RH = 30;
 let tlSel = null;   // { track, key }
 let drag = null;
 
-tlLabels.innerHTML = '<div>Phases</div>' + TL_TRACKS.map(t => `<div><span>${t.label}</span><output data-k="${t.k}"></output></div>`).join('');
-const tlOutputs = Object.fromEntries([...tlLabels.querySelectorAll('output')].map(o => [o.dataset.k, o]));
+// Click a track name to show only that track at full height for precise tuning.
+let tlFocus = null, tlOutputs = {};
+function renderLabels() {
+  const btn = t => `<button type="button" class="tl-track" data-k="${t.k}" aria-pressed="${tlFocus === t.k}" title="${tlFocus ? 'Show all tracks' : 'Show only this track'}">${t.label}</button>`;
+  tlLabels.innerHTML = '<div>Phases</div>' + (tlFocus
+    ? `<div class="focus" style="height:${TL_TRACKS.length * RH}px">${btn(TRACK[tlFocus])}<output data-k="${tlFocus}"></output><button type="button" class="tl-all">All tracks</button></div>`
+    : TL_TRACKS.map(t => `<div>${btn(t)}<output data-k="${t.k}"></output></div>`).join(''));
+  tlOutputs = Object.fromEntries([...tlLabels.querySelectorAll('output')].map(o => [o.dataset.k, o]));
+}
+function setFocus(k) { tlFocus = k; renderLabels(); drawTL(); }
+tlLabels.addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  setFocus(b.classList.contains('tl-all') || tlFocus ? null : b.dataset.k);
+});
+renderLabels();
 const fmtV = (tr, v) => `${v.toFixed((String(tr.step).split('.')[1] || '').length)}${tr.unit === '%' ? '%' : ' ' + tr.unit}`;
 
 const geom = () => {
   const W = svg.clientWidth, span = W - 2 * PAD;
   return { W, X: t => PAD + t / tlC.total * span, T: x => Math.min(tlC.total, Math.max(0, (x - PAD) / span * tlC.total)), perPx: tlC.total / span };
 };
-const rowTop = r => PH + r * RH;
-const yOf = (tr, r, v) => rowTop(r) + RH - 5 - (v - tr.min) / (tr.max - tr.min) * (RH - 10);
-const vOf = (tr, r, y) => {
-  const v = tr.min + (rowTop(r) + RH - 5 - y) / (RH - 10) * (tr.max - tr.min);
+// visible rows: all tracks, or the focused one using the whole height
+const rowsOf = () => tlFocus ? [{ tr: TRACK[tlFocus], top: PH, h: TL_TRACKS.length * RH }]
+  : TL_TRACKS.map((tr, r) => ({ tr, top: PH + r * RH, h: RH }));
+let tlRows = rowsOf();
+// round grid spacing: 1, 2, 2.5 or 5 times a power of ten
+const niceStep = raw => {
+  const p = Math.pow(10, Math.floor(Math.log10(raw)));
+  return [1, 2, 2.5, 5, 10].map(m => m * p).find(s => s >= raw);
+};
+const yOf = (row, v) => row.top + row.h - 5 - (v - row.tr.min) / (row.tr.max - row.tr.min) * (row.h - 10);
+const vOf = (row, y) => {
+  const tr = row.tr, v = tr.min + (row.top + row.h - 5 - y) / (row.h - 10) * (tr.max - tr.min);
   return Math.min(tr.max, Math.max(tr.min, Math.round(v / tr.step) * tr.step));
 };
 
@@ -1288,18 +1323,24 @@ function drawTL() {
     if (w > 30) out += `<text class="ph-dur" x="${x0 + 6}" y="23">${TL.durs[i].toFixed(2)} s</text>`;
   });
   out += `<rect class="seek" x="0" y="0" width="${W}" height="${PH}"/>`;
-  TL_TRACKS.forEach((tr, r) => {
-    const top = rowTop(r), list = tlC.tracks[tr.k];
-    out += `<rect class="row" data-r="${r}" x="0" y="${top}" width="${W}" height="${RH}"/>`;
-    out += `<line class="base" x1="0" x2="${W}" y1="${top + RH - 0.5}" y2="${top + RH - 0.5}"/>`;
+  tlRows = rowsOf();
+  tlRows.forEach((row, r) => {
+    const { tr, top } = row, list = tlC.tracks[tr.k];
+    out += `<rect class="row" data-r="${r}" x="0" y="${top}" width="${W}" height="${row.h}"/>`;
+    out += `<line class="base" x1="0" x2="${W}" y1="${top + row.h - 0.5}" y2="${top + row.h - 0.5}"/>`;
+    if (tlFocus)   // value grid for precise tuning
+      for (let v = tr.min, step = niceStep((tr.max - tr.min) / 4); v <= tr.max + 1e-9; v += step) {
+        const y = yOf(row, v);
+        out += `<line class="grid" x1="0" x2="${W}" y1="${y}" y2="${y}"/><text class="grid-text" x="${W - PAD}" y="${y - 3}">${fmtV(tr, v)}</text>`;
+      }
     let d = '';
     for (let i = 0, n = Math.max(60, Math.round(W / 3)); i <= n; i++) {
       const t = tlC.total * i / n;
-      d += `${i ? 'L' : 'M'}${X(t).toFixed(1)},${yOf(tr, r, evalTrack(list, t)).toFixed(1)}`;
+      d += `${i ? 'L' : 'M'}${X(t).toFixed(1)},${yOf(row, evalTrack(list, t)).toFixed(1)}`;
     }
     out += `<path class="curve" d="${d}"/>`;
     for (const x of list) {
-      const cx = X(x.t), cy = yOf(tr, r, x.v), sel = tlSel && tlSel.key === x.key;
+      const cx = X(x.t), cy = yOf(row, x.v), sel = tlSel && tlSel.key === x.key;
       const cls = `key${x.key.swap ? ' swap' : ''}${sel ? ' sel' : ''}`;
       const i = TL.keys[tr.k].indexOf(x.key);
       out += `<rect class="${cls}" x="-4" y="-4" width="8" height="8" rx="1" transform="translate(${cx} ${cy}) rotate(45)"><title>${tr.label} ${fmtV(tr, x.v)} at ${x.t.toFixed(2)} s${x.key.swap ? ' · swap' : ''}</title></rect>`;
@@ -1319,7 +1360,7 @@ function drawTL() {
 
 function renderInspector() {
   if (!tlSel) {
-    tlInspect.innerHTML = '<span class="hint">Drag a key to move it · double-click a track to add one · drag a phase edge to retime it · Delete removes the selected key</span>';
+    tlInspect.innerHTML = '<span class="hint">Drag a key to move it · arrows nudge it · double-click a track to add one · drag a phase edge to retime it · click a track name to tune it alone</span>';
     return;
   }
   const tr = TRACK[tlSel.track], k = tlSel.key, t = tlC.starts[k.p] + k.u * TL.durs[k.p];
@@ -1397,7 +1438,7 @@ svg.addEventListener('pointerdown', e => {
   if (el.classList.contains('key-hit')) {
     const k = TL.keys[el.dataset.k][+el.dataset.i];
     tlSel = { track: el.dataset.k, key: k };
-    drag = { type: 'key', track: el.dataset.k, key: k, r: TL_TRACKS.findIndex(t => t.k === el.dataset.k) };
+    drag = { type: 'key', track: el.dataset.k, key: k, row: tlRows.find(r => r.tr.k === el.dataset.k) };
   } else if (el.classList.contains('edge-hit')) {
     // edges can coincide when a phase is empty: pick by the first move's direction
     const cands = TL.durs.map((_, i) => i).filter(i => Math.abs(X(tlC.starts[i] + TL.durs[i]) - px) <= 5);
@@ -1418,7 +1459,7 @@ svg.addEventListener('pointermove', e => {
   const { T } = geom(), rect = svg.getBoundingClientRect();
   const px = e.clientX - rect.left, py = e.clientY - rect.top;
   if (drag.type === 'key') {
-    moveKey(drag.track, drag.key, T(px), vOf(TRACK[drag.track], drag.r, py));
+    moveKey(drag.track, drag.key, T(px), vOf(drag.row, py));
   } else {
     const dx = px - drag.x0;
     if (drag.idx === null) {
@@ -1436,7 +1477,7 @@ svg.addEventListener('pointerup', endDrag);
 svg.addEventListener('pointercancel', endDrag);
 svg.addEventListener('dblclick', e => {
   if (!e.target.classList.contains('row')) return;
-  const r = +e.target.dataset.r, tr = TL_TRACKS[r], { T } = geom();
+  const tr = tlRows[+e.target.dataset.r].tr, { T } = geom();
   const t = T(e.clientX - svg.getBoundingClientRect().left);
   const k = kf(0, 0, evalTrack(tlC.tracks[tr.k], t));
   TL.keys[tr.k].push(k);
@@ -1482,7 +1523,7 @@ function tlFrame() {
     const x = live ? geom().X(tlT) : -10;
     head.setAttribute('x1', x); head.setAttribute('x2', x);
   }
-  for (const tr of TL_TRACKS) tlOutputs[tr.k].value = live ? fmtV(tr, evalTrack(tlC.tracks[tr.k], tlT)) : '';
+  for (const tr of TL_TRACKS) if (tlOutputs[tr.k]) tlOutputs[tr.k].value = live ? fmtV(tr, evalTrack(tlC.tracks[tr.k], tlT)) : '';
 }
 onLookChange = () => { lastNote = ''; };
 
@@ -1496,6 +1537,15 @@ addEventListener('keydown', e => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   if (tlSel && (e.key === 'Delete' || e.key === 'Backspace') && !e.target.closest?.('input')) { e.preventDefault(); deleteSelectedKey(); return; }
   if (e.key === 'Escape' && tlSel) { selectKey(null); return; }
+  // arrows nudge the selected key: ↑↓ one value step, ←→ 0.01 s (Shift: ×10)
+  if (tlSel && e.key.startsWith('Arrow') && !e.target.closest?.('input')) {
+    e.preventDefault();
+    const k = tlSel.key, tr = TRACK[tlSel.track], m = e.shiftKey ? 10 : 1;
+    const t = tlC.starts[k.p] + k.u * TL.durs[k.p];
+    const dv = { ArrowUp: tr.step, ArrowDown: -tr.step }[e.key] || 0, dt = { ArrowRight: 0.01, ArrowLeft: -0.01 }[e.key] || 0;
+    moveKey(tlSel.track, k, t + dt * m, Math.round((k.v + dv * m) / tr.step) * tr.step);
+    return;
+  }
   if (e.target.closest?.('input, button, a')) return;   // let controls keep their own keys
   if (e.code === 'Space') { e.preventDefault(); paused = !paused; updateHud(); }
   else if (e.key === 'ArrowRight') {
